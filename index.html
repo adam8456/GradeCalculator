@@ -1,0 +1,388 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Grade Average Calculator</title>
+
+    <style>
+      body {
+        font-family: Arial;
+        background: #f4f6fb;
+        padding: 40px;
+      }
+
+      textarea {
+        width: 100%;
+        height: 120px;
+        font-size: 14px;
+      }
+
+      button {
+        padding: 8px 14px;
+        margin-top: 10px;
+        cursor: pointer;
+      }
+
+      table {
+        margin-top: 20px;
+        border-collapse: collapse;
+        width: 100%;
+        background: white;
+      }
+
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: center;
+      }
+
+      input {
+        width: 80px;
+      }
+
+      .section {
+        margin-top: 40px;
+        padding: 20px;
+        background: white;
+        border: 1px solid #ddd;
+      }
+
+      .average {
+        font-size: 22px;
+        margin-top: 20px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Average Calculator</h1>
+
+    <b>Value Mode</b><br />
+
+    <label>
+      <input
+        type="radio"
+        name="mode"
+        value="grade"
+        checked
+        onchange="render()"
+      />
+      Grades
+    </label>
+
+    <label>
+      <input type="radio" name="mode" value="percent" onchange="render()" />
+      Percentages
+    </label>
+
+    <br /><br />
+
+    <b>Input Mode</b><br />
+
+    <label>
+      <input type="radio" name="inputMode" value="pc" checked />
+      PC
+    </label>
+
+    <label>
+      <input type="radio" name="inputMode" value="mobile" />
+      Mobile
+    </label>
+
+    <p>Paste grades:</p>
+
+    <textarea id="formula"></textarea><br />
+
+    <button onclick="pasteClipboard()">📋 Paste from Clipboard</button>
+    <button onclick="parseInput()">Parse</button>
+
+    <table id="gradesTable">
+      <thead>
+        <tr>
+          <th>Value</th>
+          <th>Weight</th>
+          <th>Remove</th>
+        </tr>
+      </thead>
+
+      <tbody></tbody>
+    </table>
+
+    <button onclick="addGrade()">Add grade</button>
+
+    <div class="average">Average: <span id="avg">-</span></div>
+
+    <div class="section">
+      <h2>Target Calculator</h2>
+
+      <p>
+        Target average:
+        <input id="targetAvg" type="number" step="0.01" />
+      </p>
+
+      <p>
+        Future grade weight:
+        <input id="futureWeight" type="number" step="0.01" />
+        <button onclick="calculateWorstGrade()">Worst grade allowed</button>
+      </p>
+
+      <p id="worstResult"></p>
+
+      <hr />
+
+      <p>
+        Future grade value:
+        <input id="futureValue" type="number" step="0.01" />
+        <button onclick="calculateMaxWeight()">Maximum weight allowed</button>
+      </p>
+
+      <p id="weightResult"></p>
+    </div>
+
+    <script>
+      let grades = [];
+
+      function getMode() {
+        return document.querySelector("input[name='mode']:checked").value;
+      }
+
+      function getInputMode() {
+        return document.querySelector("input[name='inputMode']:checked").value;
+      }
+
+      function parseInput() {
+        if (getInputMode() == "mobile") {
+          parseMobile();
+        } else {
+          parsePC();
+        }
+
+        render();
+      }
+
+      function parseMobile() {
+        const text = document.getElementById("formula").value;
+
+        const matches = text.match(/([\d\.]+)\s*[×x]\s*([\d\.]+)%?/g);
+
+        if (!matches) {
+          alert("No values found");
+          return;
+        }
+
+        grades = [];
+
+        matches.forEach((m) => {
+          const parts = m.split(/[×x]/);
+
+          const weight = parseFloat(parts[0]);
+          const value = parseFloat(parts[1]);
+
+          grades.push({
+            value: value,
+            weight: weight,
+          });
+        });
+      }
+
+      function parsePC() {
+        const text = document.getElementById("formula").value;
+        const lines = text.split("\n");
+
+        grades = [];
+
+        let currentWeight = 1;
+
+        for (let line of lines) {
+          line = line.trim();
+
+          if (line === "") continue;
+
+          // detect event title
+          if (line.endsWith(":")) {
+            currentWeight = 1;
+            continue;
+          }
+
+          // detect weight
+          const weightMatch = line.match(/Váha události:\s*([\d\.]+)×/);
+
+          if (weightMatch) {
+            currentWeight = parseFloat(weightMatch[1]);
+            continue;
+          }
+
+          // percentages (can have multiple)
+          const percentMatches = [...line.matchAll(/(\d+(?:\.\d+)?)%/g)];
+
+          if (percentMatches.length > 0) {
+            percentMatches.forEach((match) => {
+              grades.push({
+                value: parseFloat(match[1]),
+                weight: currentWeight,
+              });
+            });
+            continue;
+          }
+
+          // split columns
+          const parts = line.split(/\s+/);
+
+          const first = parts[0];
+
+          // ignore -, N, etc.
+          if (first === "-" || first === "N") continue;
+
+          // detect numeric grade
+          if (/^[1-5]$/.test(first)) {
+            grades.push({
+              value: parseFloat(first),
+              weight: currentWeight,
+            });
+          }
+        }
+      }
+      function render() {
+        const tbody = document.querySelector("#gradesTable tbody");
+
+        tbody.innerHTML = "";
+
+        const mode = getMode();
+
+        grades.forEach((g, i) => {
+          const tr = document.createElement("tr");
+
+          tr.innerHTML = `
+
+<td>
+<input type="number" step="0.01"
+value="${g.value}"
+onchange="updateValue(${i},this.value)">
+${mode == "percent" ? "%" : ""}
+</td>
+
+<td>
+<input type="number" step="0.01"
+value="${g.weight}"
+onchange="updateWeight(${i},this.value)">
+</td>
+
+<td>
+<button onclick="removeGrade(${i})">X</button>
+</td>
+
+`;
+
+          tbody.appendChild(tr);
+        });
+
+        calculateAverage();
+      }
+
+      function updateValue(i, val) {
+        grades[i].value = parseFloat(val);
+
+        calculateAverage();
+      }
+
+      function updateWeight(i, val) {
+        grades[i].weight = parseFloat(val);
+
+        calculateAverage();
+      }
+
+      function removeGrade(i) {
+        grades.splice(i, 1);
+
+        render();
+      }
+
+      function addGrade() {
+        const mode = getMode();
+
+        grades.push({
+          value: mode == "percent" ? 100 : 1,
+          weight: 1,
+        });
+
+        render();
+      }
+
+      function calculateAverage() {
+        let sum = 0;
+        let weights = 0;
+
+        grades.forEach((g) => {
+          sum += g.value * g.weight;
+          weights += g.weight;
+        });
+
+        if (weights == 0) {
+          document.getElementById("avg").innerText = "-";
+          return;
+        }
+
+        const avg = sum / weights;
+
+        if (getMode() == "percent") {
+          document.getElementById("avg").innerText = avg.toFixed(2) + "%";
+        } else {
+          document.getElementById("avg").innerText = avg.toFixed(2);
+        }
+      }
+
+      function getTotals() {
+        let sum = 0;
+        let weights = 0;
+
+        grades.forEach((g) => {
+          sum += g.value * g.weight;
+          weights += g.weight;
+        });
+
+        return { sum, weights };
+      }
+
+      function calculateWorstGrade() {
+        const target = parseFloat(document.getElementById("targetAvg").value);
+
+        const weight = parseFloat(
+          document.getElementById("futureWeight").value,
+        );
+
+        const { sum, weights } = getTotals();
+
+        const result = (target * (weights + weight) - sum) / weight;
+
+        document.getElementById("worstResult").innerText =
+          "Worst value allowed: " +
+          result.toFixed(2) +
+          (getMode() == "percent" ? "%" : "");
+      }
+
+      function calculateMaxWeight() {
+        const target = parseFloat(document.getElementById("targetAvg").value);
+
+        const value = parseFloat(document.getElementById("futureValue").value);
+
+        const { sum, weights } = getTotals();
+
+        const result = (target * weights - sum) / (value - target);
+
+        document.getElementById("weightResult").innerText =
+          "Maximum weight allowed: " + result.toFixed(2);
+      }
+
+      async function pasteClipboard() {
+        try {
+          const text = await navigator.clipboard.readText();
+          document.getElementById("formula").value = text;
+        } catch (err) {
+          alert("Clipboard access failed. Try pasting manually.");
+        }
+      }
+    </script>
+  </body>
+</html>
